@@ -37,3 +37,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# ------------ GENERAL ------------
+
+.DS_Store
