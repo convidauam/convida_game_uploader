@@ -1,0 +1,29 @@
+[tools]
+python = "3.12"
+uv = "latest"
+npm = "latest"
+
+[settings]
+python.uv_venv_auto = true
+
+[tasks._setup_backend]
+description = "Set up the development environment for the backend"
+hide = true
+run = "uv sync"
+
+[tasks._setup_frontend]
+description = "Set up the development environment for the frontend"
+hide = true
+run = "npm install"
+
+[tasks.setup]
+description = "Set up the development environment for the project"
+run = "chmod +x mise-tasks/dev.py"
+depends = [
+    "_setup_backend",
+    "_setup_frontend"
+]
+
+[tasks.devb]
+description = "Run the backend in development mode"
+run = "uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000"
