@@ -8,3 +8,9 @@ dependencies = [
     "python-multipart>=0.0.21",
     "uvicorn>=0.40.0",
 ]
+
+[dependency-groups]
+dev = [
+    "marimo>=0.18.4",
+    "rich>=14.2.0",
+]
