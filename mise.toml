@@ -27,3 +27,7 @@ depends = [
 [tasks.devb]
 description = "Run the backend in development mode"
 run = "uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000"
+
+[tasks.devf]
+description = "Run the frontend in development mode"
+run = "npm run dev --port 3000"
