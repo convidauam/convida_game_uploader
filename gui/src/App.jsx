@@ -3,6 +3,7 @@ import './App.css'
 import Icon from '@mdi/react';
 import { mdiDataMatrix, mdiCube, mdiReload, mdiUnity, mdiLanguageHtml5 } from '@mdi/js';
 import logo from './assets/logo.png';
+import { uploadGameBuild } from './services/uploadService'
 
 
 const getFilePath = (file) => file.webkitRelativePath || file.name
@@ -58,6 +59,9 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [step, setStep] = useState(1)
   const [version, setVersion] = useState('2021.3 LTS')
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploadResult, setUploadResult] = useState('')
   const buildInputRef = useRef(null)
   const htmlInputRef = useRef(null)
 
@@ -77,6 +81,8 @@ function App() {
     (file) => !summary.results.some((item) => item.match(file))
   )
   const canUpload = files.length > 0 && summary.missing.length === 0
+  const findFileById = (id) =>
+    summary.results.find((item) => item.id === id)?.found
 
   const mergeFiles = (incoming) => {
     if (!incoming?.length) return
@@ -89,6 +95,8 @@ function App() {
       return Array.from(map.values())
     })
     setStep(2)
+    setUploadError('')
+    setUploadResult('')
   }
 
   const collectFilesFromDirectory = async (dirHandle, prefix = '') => {
@@ -258,6 +266,33 @@ function App() {
   const resetAll = () => {
     setFiles([])
     setStep(1)
+    setUploadError('')
+    setUploadResult('')
+  }
+
+  const handleUpload = async () => {
+    if (!canUpload || isUploading) return
+    setIsUploading(true)
+    setUploadError('')
+    setUploadResult('')
+    try {
+      const response = await uploadGameBuild({
+        data: findFileById('data'),
+        framework: findFileById('framework'),
+        loader: findFileById('loader'),
+        wasm: findFileById('wasm'),
+        html: findFileById('html'),
+      })
+      setUploadResult(response?.message || 'Archivos subidos correctamente.')
+    } catch (error) {
+      const detail =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'No se pudo subir el juego.'
+      setUploadError(detail)
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
@@ -351,9 +386,10 @@ function App() {
                 <button
                   className="btn primary"
                   type="button"
-                  disabled={!canUpload}
+                  disabled={!canUpload || isUploading}
+                  onClick={handleUpload}
                 >
-                  Subir juego
+                  {isUploading ? 'Subiendo...' : 'Subir juego'}
                 </button>
                 <button className="btn ghost" type="button" onClick={resetAll}>
                   Limpiar seleccion
@@ -362,6 +398,12 @@ function App() {
                   <p className="sidebar-warning">
                     Faltan archivos obligatorios para continuar.
                   </p>
+                )}
+                {uploadError && (
+                  <p className="sidebar-warning">{uploadError}</p>
+                )}
+                {!uploadError && uploadResult && (
+                  <p className="sidebar-success">{uploadResult}</p>
                 )}
               </aside>
 
