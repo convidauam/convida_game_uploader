@@ -1,6 +1,14 @@
 from pathlib import Path
+from typing import AsyncGenerator
 
 from fastapi import UploadFile, HTTPException
+
+from .pipeline import (
+    Context,
+    Pipeline,
+    ValidateFilesTask,
+    DownloadFilesTask
+)
 
 ALLOWED_TYPES = {
     "data": "application/octet-stream",
@@ -11,43 +19,31 @@ ALLOWED_TYPES = {
 }
 UPLOAD_DIR = Path("api/uploads")
 
+
 async def process_files(
         data: UploadFile,
         framework: UploadFile,
         loader: UploadFile,
         wasm: UploadFile,
         html: UploadFile
-    ) -> dict:
-
-    filenames = []
+    ) -> AsyncGenerator[dict, None]:
 
     files = [data, framework, loader, wasm, html]
     root_game_path = data.filename.split(".")[0].lower()
     game_path = UPLOAD_DIR / root_game_path
     game_path.joinpath("Build").mkdir(parents=True, exist_ok=True)
 
-    for file in files:
-        if file.content_type not in ALLOWED_TYPES.values():
-            raise HTTPException(
-                status_code=415,
-                detail=f"Tipo de archivo no permitido: {file.content_type}"
-            )
-        
-        content = await file.read()
-        if file.content_type != ALLOWED_TYPES["html"]:
-            file_path = game_path / "Build" / file.filename
-        else:
-            file_path = game_path / file.filename
+    context = Context()
+    context.set("files", files)
+    context.set("allowed_types", ALLOWED_TYPES)
+    context.set("game_path", game_path)
 
-        with open(file_path, "wb") as f:
-            f.write(content)
-    
-        filenames.append({
-            "filename": file.filename,
-            "content_type": file.content_type,
-        })
+    steps = [
+        ValidateFilesTask(),
+        DownloadFilesTask()
+    ]
 
-    return {
-        "message": "Archivos recibidos correctamente",
-        "files": filenames
-    }
+    pipeline = Pipeline(steps)
+
+    async for payload in pipeline.run(context):
+        yield payload
