@@ -62,6 +62,11 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadResult, setUploadResult] = useState('')
+  const [progress, setProgress] = useState({
+    current: 0,
+    total: 6,
+    label: '',
+  })
   const buildInputRef = useRef(null)
   const htmlInputRef = useRef(null)
 
@@ -97,6 +102,7 @@ function App() {
     setStep(2)
     setUploadError('')
     setUploadResult('')
+    setProgress({ current: 0, total: 6, label: '' })
   }
 
   const collectFilesFromDirectory = async (dirHandle, prefix = '') => {
@@ -268,6 +274,7 @@ function App() {
     setStep(1)
     setUploadError('')
     setUploadResult('')
+    setProgress({ current: 0, total: 6, label: '' })
   }
 
   const handleUpload = async () => {
@@ -275,14 +282,34 @@ function App() {
     setIsUploading(true)
     setUploadError('')
     setUploadResult('')
+    setProgress({ current: 0, total: 6, label: 'Iniciando proceso...' })
     try {
-      const response = await uploadGameBuild({
-        data: findFileById('data'),
-        framework: findFileById('framework'),
-        loader: findFileById('loader'),
-        wasm: findFileById('wasm'),
-        html: findFileById('html'),
-      })
+      const response = await uploadGameBuild(
+        {
+          data: findFileById('data'),
+          framework: findFileById('framework'),
+          loader: findFileById('loader'),
+          wasm: findFileById('wasm'),
+          html: findFileById('html'),
+        },
+        {
+          onProgress: (payload) => {
+            const stepValue = Number(payload?.step)
+            const totalValue = Number(payload?.total)
+            setProgress((prev) => ({
+              current: Number.isFinite(stepValue) ? stepValue : prev.current,
+              total: Number.isFinite(totalValue) ? totalValue : prev.total,
+              label: payload?.label || prev.label,
+            }))
+            if (payload?.error) {
+              setUploadError(payload.error)
+            }
+            if (payload?.result?.message) {
+              setUploadResult(payload.result.message)
+            }
+          },
+        }
+      )
       setUploadResult(response?.message || 'Archivos subidos correctamente.')
     } catch (error) {
       const detail =
@@ -394,6 +421,31 @@ function App() {
                 <button className="btn ghost" type="button" onClick={resetAll}>
                   Limpiar seleccion
                 </button>
+                {(isUploading || progress.current > 0) && (
+                  <div className="progress-card">
+                    <p className="progress-label">
+                      {progress.label || 'Procesando...'}
+                    </p>
+                    <div
+                      className="progress-dots"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={progress.total}
+                      aria-valuenow={progress.current}
+                    >
+                      {Array.from({ length: progress.total }).map(
+                        (_, index) => (
+                          <span
+                            key={`dot-${index}`}
+                            className={`progress-dot ${
+                              index < progress.current ? 'is-active' : ''
+                            }`}
+                          />
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
                 {!canUpload && (
                   <p className="sidebar-warning">
                     Faltan archivos obligatorios para continuar.

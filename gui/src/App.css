@@ -282,6 +282,44 @@
   transform: translateY(-1px);
 }
 
+.progress-card {
+  display: grid;
+  gap: 0.7rem;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.progress-label {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.progress-dots {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e1e1e1;
+  border: 1px solid var(--border);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.progress-dot.is-active {
+  background: var(--accent);
+  border-color: var(--accent-dark);
+  transform: scale(1.15);
+}
+
 .files-area {
   display: flex;
   flex-direction: column;
