@@ -7,7 +7,8 @@ from .pipeline import (
     Context,
     Pipeline,
     ValidateFilesTask,
-    DownloadFilesTask
+    DownloadFilesTask,
+    GenerateDeployFilesTask
 )
 
 ALLOWED_TYPES = {
@@ -40,7 +41,8 @@ async def process_files(
 
     steps = [
         ValidateFilesTask(),
-        DownloadFilesTask()
+        DownloadFilesTask(),
+        GenerateDeployFilesTask()
     ]
 
     pipeline = Pipeline(steps)

@@ -4,10 +4,15 @@
 # 4. Subuendo a produccion el videojuego
 # 5. VErificando integridad del despliegue
 
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
-from typing import Any, Dict, AsyncGenerator
+import shutil
 import asyncio
+from pathlib import Path
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any, Dict, AsyncGenerator
+
+from jinja2 import Environment, FileSystemLoader
+
 
 @dataclass
 class Context:
@@ -33,7 +38,7 @@ class Pipeline:
     async def run(self, context: Context) -> AsyncGenerator[dict, None]:
         for i, task in enumerate(self.tasks):
             await task.execute(context)
-            await asyncio.sleep(1)  # Simular tiempo de procesamiento sin bloquear el loop
+            await asyncio.sleep(0.75)  # Simular tiempo de procesamiento sin bloquear el loop
             payload = {
                 "step": i + 1,
                 "total": len(self.tasks),
@@ -72,6 +77,7 @@ class DownloadFilesTask(Task):
         
         game_path = context.get("game_path")
         filenames = []
+        file_path: Path = None
         for file in files:
             content = await file.read()
             if file.content_type != allowed_types["html"]:
@@ -87,5 +93,31 @@ class DownloadFilesTask(Task):
                 "content_type": file.content_type,
             })
         context.set("filesnames", filenames)
+        context.set("dir_path", file_path.parent.resolve().as_posix())
         context.set("label_2", "Paso 2 completado")
         context.set("is_downloaded", True)
+
+
+class GenerateDeployFilesTask(Task):
+    async def execute(self, context: Context) -> None:
+        is_downloaded = context.get("is_downloaded")
+        if not is_downloaded:
+            raise ValueError("Los archivos no han sido descargados correctamente")
+        else: 
+            dir_path: str = context.get("dir_path")
+            dir_path = dir_path.split("/Build")[0]
+        
+        template_path = Path("./api/conf/Dockerfile.jinja2").resolve()
+        env = Environment(
+            loader=FileSystemLoader(template_path.parent)
+        )
+        template = env.get_template(template_path.name)
+        output = template.render(path=dir_path)
+        with open(f"{dir_path}/Dockerfile", "w") as f:
+            f.write(output)
+        
+        nginx_conf_path = template_path.parent / "nginx.conf"
+        shutil.copy(nginx_conf_path, f"{dir_path}/nginx.conf")
+
+        context.set("label_3", "Paso 3 completado")
+        context.set("is_deploy_generated", True)
