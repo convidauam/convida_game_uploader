@@ -6,10 +6,13 @@
 
 import shutil
 import asyncio
+import threading
+import subprocess
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, AsyncGenerator
+
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -38,7 +41,7 @@ class Pipeline:
     async def run(self, context: Context) -> AsyncGenerator[dict, None]:
         for i, task in enumerate(self.tasks):
             await task.execute(context)
-            await asyncio.sleep(0.75)  # Simular tiempo de procesamiento sin bloquear el loop
+            await asyncio.sleep(1)  # Simular tiempo de procesamiento sin bloquear el loop
             payload = {
                 "step": i + 1,
                 "total": len(self.tasks),
@@ -63,7 +66,7 @@ class ValidateFilesTask(Task):
         for file in files:
             if file.content_type not in allowed_types.values():
                 raise ValueError(f"Tipo de archivo no permitido: {file.content_type}")
-        context.set("label_1", "Pasooooooo 1 completado")
+        context.set("label_1", "Validación de archivos")
         context.set("is_valid", True)
 
 
@@ -93,8 +96,8 @@ class DownloadFilesTask(Task):
                 "content_type": file.content_type,
             })
         context.set("filesnames", filenames)
-        context.set("dir_path", file_path.parent.resolve().as_posix())
-        context.set("label_2", "Paso 2 completado")
+        context.set("dir_path", file_path.parent.as_posix())
+        context.set("label_2", "Descarga de archivos")
         context.set("is_downloaded", True)
 
 
@@ -103,11 +106,11 @@ class GenerateDeployFilesTask(Task):
         is_downloaded = context.get("is_downloaded")
         if not is_downloaded:
             raise ValueError("Los archivos no han sido descargados correctamente")
-        else: 
-            dir_path: str = context.get("dir_path")
-            dir_path = dir_path.split("/Build")[0]
         
+        dir_path: str = context.get("dir_path")
+        dir_path = dir_path.split("/Build")[0]
         template_path = Path("./api/conf/Dockerfile.jinja2").resolve()
+
         env = Environment(
             loader=FileSystemLoader(template_path.parent)
         )
@@ -119,5 +122,56 @@ class GenerateDeployFilesTask(Task):
         nginx_conf_path = template_path.parent / "nginx.conf"
         shutil.copy(nginx_conf_path, f"{dir_path}/nginx.conf")
 
-        context.set("label_3", "Paso 3 completado")
+        context.set("label_3", "Generación de archivos")
         context.set("is_deploy_generated", True)
+
+
+class BuildImageTask(Task):
+    async def execute(self, context: Context) -> None:
+        is_deploy_generated = context.get("is_deploy_generated")
+        if not is_deploy_generated:
+            raise ValueError("Los archivos de despliegue no han sido generados correctamente")
+        
+        game_name: str = context.get("game_name")
+        game_path: Path = context.get("game_path")
+        game_path = game_path.joinpath("Dockerfile").as_posix()
+        project_root = Path(__file__).parents[2].resolve()
+
+        cmd = [
+            "docker",
+            "build",
+            "-t",
+            game_name,
+            "-f",
+            game_path,
+            "."
+        ]
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=project_root,
+            )
+
+            thread = threading.Thread(
+                target=self._check_output,
+                args=(process,),
+            )
+
+            thread.start()
+            process.wait()
+            thread.join()
+        except Exception as e:
+            raise ValueError(f"Error al construir la imagen Docker: {str(e)}")
+        
+        context.set("label_4", "Construcción de imagen")
+        context.set("is_image_built", True)
+    
+    def _check_output(self, process: subprocess.Popen) -> None:
+        for line in process.stdout:
+            if line.find("ERROR") != -1:
+                raise ValueError("Error durante la construcción de la imagen Docker")
+                

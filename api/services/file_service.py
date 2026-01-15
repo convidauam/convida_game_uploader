@@ -8,7 +8,8 @@ from .pipeline import (
     Pipeline,
     ValidateFilesTask,
     DownloadFilesTask,
-    GenerateDeployFilesTask
+    GenerateDeployFilesTask,
+    BuildImageTask
 )
 
 ALLOWED_TYPES = {
@@ -37,12 +38,14 @@ async def process_files(
     context = Context()
     context.set("files", files)
     context.set("allowed_types", ALLOWED_TYPES)
+    context.set("game_name", root_game_path)
     context.set("game_path", game_path)
 
     steps = [
         ValidateFilesTask(),
         DownloadFilesTask(),
-        GenerateDeployFilesTask()
+        GenerateDeployFilesTask(),
+        BuildImageTask(),
     ]
 
     pipeline = Pipeline(steps)
