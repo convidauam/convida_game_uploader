@@ -1,4 +1,5 @@
 import shutil
+import socket
 import asyncio
 import threading
 import subprocess
@@ -41,11 +42,11 @@ class Pipeline:
                 "total": len(self.tasks),
                 "label": context.get(f"label_{i + 1}", "Procesando..."),
             }
-            print(i)
             if i == len(self.tasks) - 1:
+                port = context.get("port")
                 payload["done"] = True
                 payload["result"] = {
-                    "message": "Archivos recibidos correctamente",
+                    "message": f"Videojuego corriendo en http://localhost:{port}",
                     "files": context.get("filesnames", [])
                 }
             yield payload
@@ -172,6 +173,7 @@ class DeployGameTask(Task):
             raise ValueError("La imagen Docker no ha sido construida correctamente")
         
         game_name: str = context.get("game_name")
+        port = find_free_port()
         cmd = [
             "docker",
             "run",
@@ -180,7 +182,7 @@ class DeployGameTask(Task):
             "--rm",
             "-d",
             "-p",
-            "8080:80",
+            f"{port}:80",
             game_name,
         ]
 
@@ -204,6 +206,7 @@ class DeployGameTask(Task):
             raise ValueError(f"Error al desplegar el videojuego: {str(e)}")
         
         context.set("label_5", "Despliegue del videojuego")
+        context.set("port", port)
         context.set("is_deployed", True)
 
 
@@ -211,3 +214,11 @@ def check_output(process: subprocess.Popen) -> None:
     for line in process.stdout:
         if line.find("ERROR") != -1 or line.find("Error") != -1:
             raise ValueError("Error con Docker")
+
+def find_free_port(start=8080):
+    port = start
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("127.0.0.1", port)) != 0:
+                return port
+        port += 1
