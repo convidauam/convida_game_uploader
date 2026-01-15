@@ -64,7 +64,7 @@ function App() {
   const [uploadResult, setUploadResult] = useState('')
   const [progress, setProgress] = useState({
     current: 0,
-    total: 6,
+    total: 5,
     label: '',
   })
   const buildInputRef = useRef(null)
@@ -102,7 +102,7 @@ function App() {
     setStep(2)
     setUploadError('')
     setUploadResult('')
-    setProgress({ current: 0, total: 6, label: '' })
+    setProgress({ current: 0, total: 5, label: '' })
   }
 
   const collectFilesFromDirectory = async (dirHandle, prefix = '') => {
@@ -274,7 +274,7 @@ function App() {
     setStep(1)
     setUploadError('')
     setUploadResult('')
-    setProgress({ current: 0, total: 6, label: '' })
+    setProgress({ current: 0, total: 5, label: '' })
   }
 
   const handleUpload = async () => {
@@ -282,7 +282,7 @@ function App() {
     setIsUploading(true)
     setUploadError('')
     setUploadResult('')
-    setProgress({ current: 0, total: 6, label: 'Iniciando proceso...' })
+    setProgress({ current: 0, total: 5, label: 'Iniciando proceso...' })
     try {
       const response = await uploadGameBuild(
         {
