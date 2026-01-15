@@ -1,9 +1,3 @@
-# 1. Validar tipos de archivos
-# 2. Subiendo archivos al servidor
-# 3. Generando archivos de despliegue
-# 4. Subuendo a produccion el videojuego
-# 5. VErificando integridad del despliegue
-
 import shutil
 import asyncio
 import threading
@@ -124,7 +118,7 @@ class GenerateDeployFilesTask(Task):
 
         context.set("label_3", "Generación de archivos")
         context.set("is_deploy_generated", True)
-
+            
 
 class BuildImageTask(Task):
     async def execute(self, context: Context) -> None:
@@ -157,7 +151,7 @@ class BuildImageTask(Task):
             )
 
             thread = threading.Thread(
-                target=self._check_output,
+                target=check_output,
                 args=(process,),
             )
 
@@ -169,9 +163,51 @@ class BuildImageTask(Task):
         
         context.set("label_4", "Construcción de imagen")
         context.set("is_image_built", True)
-    
-    def _check_output(self, process: subprocess.Popen) -> None:
-        for line in process.stdout:
-            if line.find("ERROR") != -1:
-                raise ValueError("Error durante la construcción de la imagen Docker")
-                
+
+
+class DeployGameTask(Task):
+    async def execute(self, context: Context) -> None:
+        is_image_built = context.get("is_image_built")
+        if not is_image_built:
+            raise ValueError("La imagen Docker no ha sido construida correctamente")
+        
+        game_name: str = context.get("game_name")
+        cmd = [
+            "docker",
+            "run",
+            "--name",
+            f"{game_name}-local",
+            "--rm",
+            "-d",
+            "-p",
+            "8080:80",
+            game_name,
+        ]
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+
+            thread = threading.Thread(
+                target=check_output,
+                args=(process,),
+            )
+
+            thread.start()
+            process.wait()
+            thread.join()
+        except Exception as e:
+            raise ValueError(f"Error al desplegar el videojuego: {str(e)}")
+        
+        context.set("label_5", "Despliegue del videojuego")
+        context.set("is_deployed", True)
+
+
+def check_output(process: subprocess.Popen) -> None:
+    for line in process.stdout:
+        if line.find("ERROR") != -1 or line.find("Error") != -1:
+            raise ValueError("Error con Docker")

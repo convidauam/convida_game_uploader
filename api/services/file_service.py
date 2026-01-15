@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 
 from .pipeline import (
     Context,
@@ -9,7 +9,8 @@ from .pipeline import (
     ValidateFilesTask,
     DownloadFilesTask,
     GenerateDeployFilesTask,
-    BuildImageTask
+    BuildImageTask,
+    DeployGameTask
 )
 
 ALLOWED_TYPES = {
@@ -46,6 +47,7 @@ async def process_files(
         DownloadFilesTask(),
         GenerateDeployFilesTask(),
         BuildImageTask(),
+        DeployGameTask()
     ]
 
     pipeline = Pipeline(steps)
