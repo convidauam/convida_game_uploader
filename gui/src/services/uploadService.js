@@ -26,10 +26,10 @@ const drainSseBuffer = (buffer, onPayload) => {
 
 export const uploadGameBuild = async (files, { onProgress } = {}) => {
   const formData = new FormData()
-  Object.entries(files).forEach(([key, file]) => {
-    if (file) {
-      formData.append(key, file)
-    }
+  ;(files || []).forEach((file) => {
+    if (!file) return
+    const filename = file.webkitRelativePath || file.name
+    formData.append('files', file, filename)
   })
 
   let result = null
