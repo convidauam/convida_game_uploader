@@ -469,6 +469,7 @@
 .extras-card {
   display: grid;
   gap: 0.75rem;
+  min-height: 240px;
 }
 
 .extras-title {
@@ -478,17 +479,47 @@
 }
 
 .extras-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 0.5rem;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 0.25rem;
 }
 
-.extras-pill {
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
+.extras-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
   background: #ffffff;
   border: 1px solid var(--border);
-  font-size: 0.8rem;
+}
+
+.extras-name {
+  font-size: 0.85rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.extras-remove {
+  border: none;
+  background: rgba(210, 85, 85, 0.1);
+  color: var(--danger);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.extras-remove:hover {
+  transform: translateY(-1px);
+  background: rgba(210, 85, 85, 0.18);
+}
 }
 
 code {

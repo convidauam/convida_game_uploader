@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import './App.css'
 import Icon from '@mdi/react';
-import { mdiDataMatrix, mdiCube, mdiReload, mdiUnity, mdiLanguageHtml5 } from '@mdi/js';
+import { mdiDataMatrix, mdiCube, mdiReload, mdiUnity, mdiLanguageHtml5, mdiTrashCanOutline } from '@mdi/js';
 import logo from './assets/logo.png';
 import { uploadGameBuild } from './services/uploadService'
 
 
 const getFilePath = (file) => file.webkitRelativePath || file.name
+const getFileKey = (file) => `${getFilePath(file)}-${file.size}`
 
 const REQUIRED_FILES = [
   {
@@ -45,7 +46,6 @@ const REQUIRED_FILES = [
   },
 ]
 
-const VERSION_OPTIONS = ['2020.3 LTS', '2021.3 LTS', '2022.3 LTS', 'Unity 6']
 const FILE_ICONS = {
   data: mdiDataMatrix,
   framework: mdiCube,
@@ -58,7 +58,6 @@ function App() {
   const [files, setFiles] = useState([])
   const [isDragging, setIsDragging] = useState(false)
   const [step, setStep] = useState(1)
-  const [version, setVersion] = useState('2021.3 LTS')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadResult, setUploadResult] = useState('')
@@ -67,7 +66,6 @@ function App() {
     total: 5,
     label: '',
   })
-  const buildInputRef = useRef(null)
   const htmlInputRef = useRef(null)
 
   const summary = useMemo(() => {
@@ -79,22 +77,17 @@ function App() {
     return { results, missing }
   }, [files])
 
-  const buildItems = summary.results.filter((item) => item.group === 'build')
-  const htmlItem = summary.results.find((item) => item.id === 'html')
-  const buildPresent = buildItems.filter((item) => item.found).length
   const extraFiles = files.filter(
     (file) => !summary.results.some((item) => item.match(file))
   )
   const canUpload = files.length > 0 && summary.missing.length === 0
-  const findFileById = (id) =>
-    summary.results.find((item) => item.id === id)?.found
 
   const mergeFiles = (incoming) => {
     if (!incoming?.length) return
     setFiles((prev) => {
       const map = new Map()
       ;[...prev, ...incoming].forEach((file) => {
-        const key = `${file.webkitRelativePath || file.name}-${file.size}`
+        const key = getFileKey(file)
         map.set(key, file)
       })
       return Array.from(map.values())
@@ -179,39 +172,15 @@ function App() {
     return []
   }
 
-  const handlePickBuildFolder = async () => {
-    if (window.showDirectoryPicker) {
-      try {
-        const dirHandle = await window.showDirectoryPicker()
-        const collected = await collectFilesFromDirectory(dirHandle)
-        mergeFiles(collected)
-        return
-      } catch (error) {
-        if (error?.name !== 'AbortError') {
-          buildInputRef.current?.click()
-        }
-        return
-      }
-    }
-
-    buildInputRef.current?.click()
-  }
-
   const handlePickHtml = async () => {
     if (window.showOpenFilePicker) {
       try {
-        const [handle] = await window.showOpenFilePicker({
-          multiple: false,
-          types: [
-            {
-              description: 'HTML',
-              accept: { 'text/html': ['.html'] },
-            },
-          ],
+        const handles = await window.showOpenFilePicker({
+          multiple: true,
         })
-        if (handle) {
-          const file = await handle.getFile()
-          mergeFiles([file])
+        if (handles?.length) {
+          const picked = await Promise.all(handles.map((handle) => handle.getFile()))
+          mergeFiles(picked)
         }
         return
       } catch (error) {
@@ -259,11 +228,6 @@ function App() {
     setIsDragging(false)
   }
 
-  const handleBuildPick = (event) => {
-    mergeFiles(Array.from(event.target.files || []))
-    event.target.value = ''
-  }
-
   const handleHtmlPick = (event) => {
     mergeFiles(Array.from(event.target.files || []))
     event.target.value = ''
@@ -277,6 +241,12 @@ function App() {
     setProgress({ current: 0, total: 5, label: '' })
   }
 
+  const removeFile = (target) => {
+    if (!target) return
+    const targetKey = getFileKey(target)
+    setFiles((prev) => prev.filter((file) => getFileKey(file) !== targetKey))
+  }
+
   const handleUpload = async () => {
     if (!canUpload || isUploading) return
     setIsUploading(true)
@@ -284,32 +254,23 @@ function App() {
     setUploadResult('')
     setProgress({ current: 0, total: 5, label: 'Iniciando proceso...' })
     try {
-      const response = await uploadGameBuild(
-        {
-          data: findFileById('data'),
-          framework: findFileById('framework'),
-          loader: findFileById('loader'),
-          wasm: findFileById('wasm'),
-          html: findFileById('html'),
+      const response = await uploadGameBuild(files, {
+        onProgress: (payload) => {
+          const stepValue = Number(payload?.step)
+          const totalValue = Number(payload?.total)
+          setProgress((prev) => ({
+            current: Number.isFinite(stepValue) ? stepValue : prev.current,
+            total: Number.isFinite(totalValue) ? totalValue : prev.total,
+            label: payload?.label || prev.label,
+          }))
+          if (payload?.error) {
+            setUploadError(payload.error)
+          }
+          if (payload?.result?.message) {
+            setUploadResult(payload.result.message)
+          }
         },
-        {
-          onProgress: (payload) => {
-            const stepValue = Number(payload?.step)
-            const totalValue = Number(payload?.total)
-            setProgress((prev) => ({
-              current: Number.isFinite(stepValue) ? stepValue : prev.current,
-              total: Number.isFinite(totalValue) ? totalValue : prev.total,
-              label: payload?.label || prev.label,
-            }))
-            if (payload?.error) {
-              setUploadError(payload.error)
-            }
-            if (payload?.result?.message) {
-              setUploadResult(payload.result.message)
-            }
-          },
-        }
-      )
+      })
       setUploadResult(response?.message || 'Archivos subidos correctamente.')
     } catch (error) {
       const detail =
@@ -348,23 +309,12 @@ function App() {
               onDragLeave={handleDragLeave}
             >
               <div className="dropzone-inner">
-                <h2>Selecciona tu carpeta Build</h2>
+                <h2>Arrastra tu carpeta Videojuego compilado</h2>
                 <p>
-                  Debe contener los archivos de <code>data</code>,{' '}
-                  <code>framework</code>, <code>loader</code> y <code>wasm</code>.
+                  Debe contener la carpeta de <code>Build</code> y el archivo <code>index.html</code>.
                 </p>
-                <div className="dropzone-actions">
-                  <button
-                    className="btn primary"
-                    type="button"
-                    onClick={handlePickBuildFolder}
-                  >
-                    Seleccionar carpeta Build
-                  </button>
-                </div>
                 <p className="dropzone-hint" style={{ marginTop: '14px'}}>
-                  O arrastra la carpeta Build y el <code>index.html</code> en un
-                  solo drop.
+                  Si la compilación WebGL de tu videojuego tiene más archivos o carpetas, no te preocupes, también los detectamos y subimos.
                 </p>
               </div>
             </section>
@@ -382,34 +332,6 @@ function App() {
                     Validacion en tiempo real de tu build.
                   </p>
                 </div>
-                <ul className="validation-list">
-                  {summary.results.map((item) => (
-                    <li
-                      key={item.id}
-                      className={`validation-item ${
-                        item.found ? 'is-ok' : 'is-missing'
-                      }`}
-                    >
-                      <span className="validation-dot" aria-hidden="true" />
-                      <span>
-                        <code>{item.label}</code>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <label className="field">
-                  <span>Version de Unity</span>
-                  <select
-                    value={version}
-                    onChange={(event) => setVersion(event.target.value)}
-                  >
-                    {VERSION_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <button
                   className="btn primary"
                   type="button"
@@ -471,16 +393,9 @@ function App() {
                     <button
                       className="btn ghost"
                       type="button"
-                      onClick={handlePickBuildFolder}
-                    >
-                      Reemplazar carpeta Build
-                    </button>
-                    <button
-                      className="btn ghost"
-                      type="button"
                       onClick={handlePickHtml}
                     >
-                      Subir index.html
+                      Subir mas archivos
                     </button>
                   </div>
                 </div>
@@ -488,15 +403,14 @@ function App() {
                 <div className="folder-card">
                   <div className="folder-header">
                     <div>
-                      <p className="folder-title">Build</p>
+                      <p className="folder-title">Archivos principales</p>
                       <p className="folder-subtitle">
-                        {buildPresent} / {buildItems.length} requeridos
+                        {summary.results.filter((item) => item.found).length} / {summary.results.length} requeridos
                       </p>
                     </div>
-                    <span className="folder-chip">Carpeta</span>
                   </div>
                   <div className="file-grid">
-                    {buildItems.map((item, index) => (
+                    {summary.results.map((item, index) => (
                   <div
                     key={item.id}
                     className={`file-tile ${
@@ -510,7 +424,7 @@ function App() {
                     <div>
                       <p className="file-name">{item.label}</p>
                           <p className="file-meta">
-                            {item.found ? item.found.name : 'Sin archivo'}
+                            {item.found ? getFilePath(item.found) : 'Sin archivo'}
                           </p>
                         </div>
                       </div>
@@ -518,42 +432,23 @@ function App() {
                   </div>
                 </div>
 
-                <div className="standalone-card">
-                  <div className="standalone-file">
-                    <span className="file-icon" aria-hidden="true">
-                      <Icon path={FILE_ICONS['html']} size={1} />
-                    </span>
-                    <p className="file-name">index.html</p>
-                    <p className="file-meta">
-                      {htmlItem?.found ? htmlItem.found.name : 'Sin archivo'}
-                    </p>
-                  </div>
-                  <div
-                    className={`standalone-status ${
-                      htmlItem?.found ? 'is-present' : 'is-missing'
-                    }`}
-                  >
-                    {htmlItem?.found ? 'Listo' : 'Faltante'}
-                  </div>
-                </div>
-
                 {extraFiles.length > 0 && (
                   <div className="extras-card">
                     <p className="extras-title">Otros archivos detectados</p>
                     <div className="extras-list">
-                      {extraFiles.slice(0, 6).map((file, index) => (
-                        <span
-                          key={`${file.name}-${index}`}
-                          className="extras-pill"
-                        >
-                          {file.name}
-                        </span>
+                      {extraFiles.map((file) => (
+                        <div key={getFileKey(file)} className="extras-item">
+                          <span className="extras-name">{getFilePath(file)}</span>
+                          <button
+                            className="extras-remove"
+                            type="button"
+                            onClick={() => removeFile(file)}
+                            aria-label={`Eliminar ${getFilePath(file)}`}
+                          >
+                            <Icon path={mdiTrashCanOutline} size={0.7} />
+                          </button>
+                        </div>
                       ))}
-                      {extraFiles.length > 6 && (
-                        <span className="extras-pill">
-                          +{extraFiles.length - 6} mas
-                        </span>
-                      )}
                     </div>
                   </div>
                 )}
@@ -564,17 +459,9 @@ function App() {
       </div>
 
       <input
-        ref={buildInputRef}
-        type="file"
-        multiple
-        webkitdirectory=""
-        onChange={handleBuildPick}
-        className="sr-only"
-      />
-      <input
         ref={htmlInputRef}
         type="file"
-        accept=".html"
+        multiple
         onChange={handleHtmlPick}
         className="sr-only"
       />
