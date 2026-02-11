@@ -5,6 +5,12 @@ WORKDIR /usr/share/nginx/html
 COPY {{ path }}/Build/ ./Build/
 COPY {{ path }}/index.html ./index.html
 COPY {{ path }}/nginx.conf /etc/nginx/conf.d/default.conf
+{% if include_streaming_assets %}
+COPY {{ path }}/StreamingAssets/ ./StreamingAssets/
+{% endif %}
+{% if include_template_data %}
+COPY {{ path }}/TemplateData/ ./TemplateData/
+{% endif %}
 
 RUN chown -R nginx:nginx /usr/share/nginx/html \
     && chmod -R a+rX /usr/share/nginx/html
