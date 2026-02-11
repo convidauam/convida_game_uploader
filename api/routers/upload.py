@@ -13,24 +13,17 @@ router = APIRouter(
 
 @router.post("/")
 async def upload_files(
-    data: UploadFile = File(...),
-    framework: UploadFile = File(...),
-    loader: UploadFile = File(...),
-    wasm: UploadFile = File(...),
-    html: UploadFile = File(...)
+    files: list[UploadFile] = File(...)
 ):
-    files = [data, framework, loader, wasm, html]
-    if len(files) != 5:
+    if not files:
         raise HTTPException(
             status_code=400,
-            detail="Se deben enviar exactamente 5 archivos"
+            detail="Se deben enviar archivos para procesar"
         )
 
     async def event_stream():
         try:
-            async for payload in process_files(
-                data, framework, loader, wasm, html
-            ):
+            async for payload in process_files(files):
                 yield f"data: {json.dumps(payload)}\n\n"
         except HTTPException as error:
             payload = {"error": error.detail, "done": True}
