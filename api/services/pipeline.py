@@ -3,11 +3,10 @@ import socket
 import asyncio
 import threading
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, AsyncGenerator
-
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -56,13 +55,29 @@ class ValidateFilesTask(Task):
     async def execute(self, context: Context) -> None:
         files = context.get("files")
         allowed_types = context.get("allowed_types")
-        if not files or len(files) != 5:
+        required_files = context.get("required_files", {})
+        if not files:
             raise ValueError("Error al validar los archivos")
-        for file in files:
+
+        missing = [key for key in ("data", "framework", "loader", "wasm", "html") if key not in required_files]
+        if missing:
+            raise ValueError("Faltan archivos obligatorios")
+
+        for key, file in required_files.items():
             if file.content_type not in allowed_types.values():
                 raise ValueError(f"Tipo de archivo no permitido: {file.content_type}")
         context.set("label_1", "Validación de archivos")
         context.set("is_valid", True)
+
+
+def normalize_relative_path(filename: str) -> str:
+    posix_path = PurePosixPath(filename.replace("\\", "/"))
+    if posix_path.is_absolute():
+        raise ValueError("Ruta de archivo no permitida")
+    parts = [part for part in posix_path.parts if part not in ("", ".")]
+    if any(part == ".." for part in parts):
+        raise ValueError("Ruta de archivo no permitida")
+    return "/".join(parts)
 
 
 class DownloadFilesTask(Task):
@@ -75,13 +90,13 @@ class DownloadFilesTask(Task):
         
         game_path = context.get("game_path")
         filenames = []
-        file_path: Path = None
         for file in files:
             content = await file.read()
-            if file.content_type != allowed_types["html"]:
-                file_path = game_path / "Build" / file.filename
-            else:
-                file_path = game_path / file.filename
+            relative_path = normalize_relative_path(file.filename or "")
+            if not relative_path:
+                relative_path = Path(file.filename or "archivo").name
+            file_path = game_path / relative_path
+            file_path.parent.mkdir(parents=True, exist_ok=True)
 
             with open(file_path, "wb") as f:
                 f.write(content)
@@ -91,7 +106,7 @@ class DownloadFilesTask(Task):
                 "content_type": file.content_type,
             })
         context.set("filesnames", filenames)
-        context.set("dir_path", file_path.parent.as_posix())
+        context.set("dir_path", game_path.as_posix())
         context.set("label_2", "Descarga de archivos")
         context.set("is_downloaded", True)
 
@@ -103,14 +118,20 @@ class GenerateDeployFilesTask(Task):
             raise ValueError("Los archivos no han sido descargados correctamente")
         
         dir_path: str = context.get("dir_path")
-        dir_path = dir_path.split("/Build")[0]
         template_path = Path("./api/conf/Dockerfile.jinja2").resolve()
 
         env = Environment(
             loader=FileSystemLoader(template_path.parent)
         )
         template = env.get_template(template_path.name)
-        output = template.render(path=dir_path)
+        include_streaming_assets = Path(dir_path, "StreamingAssets").is_dir()
+        include_template_data = Path(dir_path, "TemplateData").is_dir()
+
+        output = template.render(
+            path=dir_path,
+            include_streaming_assets=include_streaming_assets,
+            include_template_data=include_template_data,
+        )
         with open(f"{dir_path}/Dockerfile", "w") as f:
             f.write(output)
         

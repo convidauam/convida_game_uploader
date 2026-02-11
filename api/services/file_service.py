@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -23,22 +24,49 @@ ALLOWED_TYPES = {
 UPLOAD_DIR = Path("api/uploads")
 
 
+DATA_RE = re.compile(r"\.data(\.(gz|br|unityweb))?$", re.IGNORECASE)
+
+
+def get_safe_filename(filename: str) -> str:
+    return Path(filename.replace("\\", "/")).name
+
+
+def extract_game_name(filename: str) -> str:
+    safe_name = get_safe_filename(filename)
+    name = DATA_RE.sub("", safe_name)
+    return name.lower() or "game"
+
+
+def find_required_files(files: list[UploadFile]) -> dict:
+    required = {
+        "data": DATA_RE,
+        "framework": re.compile(r"\.framework(\.js)?(\.(gz|br|unityweb))?$", re.IGNORECASE),
+        "loader": re.compile(r"\.loader(\.js)?(\.(gz|br|unityweb))?$", re.IGNORECASE),
+        "wasm": re.compile(r"\.wasm(\.(gz|br|unityweb))?$", re.IGNORECASE),
+        "html": re.compile(r"index\.html$", re.IGNORECASE),
+    }
+    matches: dict[str, UploadFile] = {}
+    for file in files:
+        filename = file.filename or ""
+        for key, pattern in required.items():
+            if key not in matches and pattern.search(filename):
+                matches[key] = file
+    return matches
+
+
 async def process_files(
-        data: UploadFile,
-        framework: UploadFile,
-        loader: UploadFile,
-        wasm: UploadFile,
-        html: UploadFile
+        files: list[UploadFile]
     ) -> AsyncGenerator[dict, None]:
 
-    files = [data, framework, loader, wasm, html]
-    root_game_path = data.filename.split(".")[0].lower()
+    required = find_required_files(files)
+    data_file = required.get("data")
+    root_game_path = extract_game_name(data_file.filename if data_file else "game.data")
     game_path = UPLOAD_DIR / root_game_path
-    game_path.joinpath("Build").mkdir(parents=True, exist_ok=True)
 
     context = Context()
     context.set("files", files)
     context.set("allowed_types", ALLOWED_TYPES)
+    context.set("required_files", required)
     context.set("game_name", root_game_path)
     context.set("game_path", game_path)
 
